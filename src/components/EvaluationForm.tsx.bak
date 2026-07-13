@@ -1,0 +1,1028 @@
+import React, { useState, useEffect } from "react";
+import { Candidate, Evaluation } from "../types";
+import { Award, AlertTriangle, ArrowLeft, ArrowRight, Save, ListCollapse, TableProperties } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+
+interface EvaluationFormProps {
+  candidates: Candidate[];
+  activeBranch: 1 | 2 | 3 | 4;
+  candidateId: string;
+  committeeName: string;
+  committeeAgency: string;
+  onSuccess: () => void;
+  onCancel: () => void;
+}
+
+interface Question {
+  id: string; // matches the Google Sheets header exact field name
+  text: string;
+  maxScore: number;
+  desc: string;
+}
+
+export default function EvaluationForm({
+  candidates,
+  activeBranch,
+  candidateId,
+  committeeName,
+  committeeAgency,
+  onSuccess,
+  onCancel
+}: EvaluationFormProps) {
+  const candidate = candidates.find(c => c.id === candidateId);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [scores, setScores] = useState<Record<string, number>>({});
+  const [comments, setComments] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showMappingHelp, setShowMappingHelp] = useState(false);
+
+  // Helper for Branch 1 Questions
+  const getBranch1Questions = (): Question[] => [
+    // --- ส่วนที่ 1: คุณลักษณะส่วนบุคคล (30 คะแนน) ---
+    // 1.1 เป็นผู้สร้างสรรค์องค์ความรู้และมีคุญูปการด้านการเกษตร (10 คะแนน)
+    {
+      id: "b1_q1_1_1",
+      text: "1. เป็นบุคคลที่มีคุณูปการต่อภาคเกษตร มีชื่อเสียงได้รับการยอมรับในระดับพื้นที่หรือกลุ่มอาชีพ ไม่น้อยกว่า 20 ปี  (คะแนนเต็ม 4 คะแนน)",
+      maxScore: 4,
+      desc: ""
+    },
+    {
+      id: "b1_q1_1_2",
+      text: "2. เป็นบุคคลที่มีคุณูปการต่อภาคเกษตร มีชื่อเสียงได้รับการยอมรับในระดับประเทศ ไม่น้อยกว่า 20 ปี  (คะแนนเต็ม 4 คะแนน)",
+      maxScore: 4,
+      desc: ""
+    },
+    {
+      id: "b1_q1_1_3",
+      text: "3. เป็นบุคคลที่มีคุณูปการต่อภาคเกษตร มีชื่อเสียงได้รับการยอมรับในระดับต่างประเทศ ไม่น้อยกว่า 10 ปี (คะแนนเต็ม 2 คะแนน)",
+      maxScore: 2,
+      desc: ""
+    },
+    // 1.2 การประพฤติตนเป็นแบบอย่างที่ดี ได้ความยอมรับจากสังคม (10 คะแนน)
+    {
+      id: "b1_q1_2_1",
+      text: "1. ขยันหมั่นเพียร ใช้เวลาว่างให้เกิดประโยชน์ เป็นตัวอย่างของการพึ่งพาตนเอง  (คะแนนเต็ม 2 คะแนน)",
+      maxScore: 2,
+      desc: ""
+    },
+    {
+      id: "b1_q1_2_2",
+      text: "2. เป็นแบบอย่างที่ดีของสมาชิกในครอบครัว ผู้คนในระดับชุมชนและประเทศ  (คะแนนเต็ม 2 คะแนน)",
+      maxScore: 2,
+      desc: ""
+    },
+    {
+      id: "b1_q1_2_3",
+      text: "3. มีระเบียบวินัย เคารพกฎหมาย มีมารยาทและรับผิดชอบต่อส่วนรวม  (คะแนนเต็ม 2 คะแนน)",
+      maxScore: 2,
+      desc: ""
+    },
+    {
+      id: "b1_q1_2_4",
+      text: "4. ปฏิบัติตนตามครรลองของระบอบประชาธิปไตย  (คะแนนเต็ม 2 คะแนน)",
+      maxScore: 2,
+      desc: ""
+    },
+    {
+      id: "b1_q1_2_5",
+      text: "5. เป็นผู้ใฝ่รู้และนำความรู้มาปฏิบัติงานจนเกิดประโยชน์ (คะแนนเต็ม 2 คะแนน)",
+      maxScore: 2,
+      desc: ""
+    },
+    // 1.3 มีคุณธรรม จริยธรรม และความเสียสละ (10 คะแนน)
+    {
+      id: "b1_q1_3_1",
+      text: "1. มีนิสัยเอื้อเฟื้อเผื่อแผ่ ช่วยเหลือผู้อื่นโดยไม่หวังสิ่งตอบแทน  (คะแนนเต็ม 5 คะแนน)",
+      maxScore: 5,
+      desc: ""
+    },
+    {
+      id: "b1_q1_3_2",
+      text: "2. ยึดถือและปฏิบัติตามหลักคุณธรรมทางศาสนา (คะแนนเต็ม 5 คะแนน)",
+      maxScore: 5,
+      desc: ""
+    },
+
+    // --- ส่วนที่ 2: ผลงานที่สร้างคุณประโยชน์ (40 คะแนน) ---
+    // 2.1 มีผลงานเป็นที่ประจักษ์ และได้รับการยอมรับ (10 คะแนน)
+    {
+      id: "b1_q2_1_1",
+      text: "1. ได้รับรางวัลและประกาศเกียรติคุณในระดับประเทศและหรือในระดับนานาชาติ  (คะแนนเต็ม 3 คะแนน)",
+      maxScore: 3,
+      desc: ""
+    },
+    {
+      id: "b1_q2_1_2",
+      text: "2. ผลงานได้รับการตีพิมพ์และเผยแพร่ผ่านสื่อต่างๆ อย่างกว้างขวางในระดับประเทศ และหรือได้รับเชิญเป็นวิทยากรเพื่อบรรยายและนำเสนอผลงานในระดับประเทศ  (คะแนนเต็ม 3 คะแนน)",
+      maxScore: 3,
+      desc: ""
+    },
+    {
+      id: "b1_q2_1_3",
+      text: "3. ร่วมเป็นคณะกรรมการหรือแกนนำองค์กรที่มีบทบาทในการกำหนดนโยบายและผลักดันขับเคลื่อนการพัฒนาภาคการเกษตร (คะแนนเต็ม 4 คะแนน)",
+      maxScore: 4,
+      desc: ""
+    },
+    // 2.2 ประโยชน์ของผลงานที่เกี่ยวข้องกับเศรษฐกิจและสังคมภาคการเกษตร (10 คะแนน)
+    {
+      id: "b1_q2_2_1",
+      text: "1. ผลงานก่อให้เกิดการเปลี่ยนแปลงรูปแบบการผลิตภาคการเกษตรในระดับชุมชนท้องถิ่น นำสู่การพัฒนาคุณภาพชีวิตและความเป็นอยู่ที่ดีขึ้น  (คะแนนเต็ม 3 คะแนน)",
+      maxScore: 3,
+      desc: ""
+    },
+    {
+      id: "b1_q2_2_2",
+      text: "2. ผลงานก่อให้เกิดการเปลี่ยนแปลงโครงสร้าง การผลิตด้านการเกษตรที่มีผลต่อการกระจายรายได้ที่เป็นธรรมและทั่วถึง  (คะแนนเต็ม 3 คะแนน)",
+      maxScore: 3,
+      desc: ""
+    },
+    {
+      id: "b1_q2_2_3",
+      text: "3. ผลงานก่อให้เกิดการขยายตัวของการผลิตทางการเกษตรส่งผลต่อการสร้างรายได้และการเจริญเติบโตทางเศรษฐกิจ (คะแนนเต็ม 4 คะแนน)",
+      maxScore: 4,
+      desc: ""
+    },
+    // 2.3 การนำผลงานไปใช้ประโยชน์ในการแก้ไขปัญหา (10 คะแนน)
+    {
+      id: "b1_q2_3_1",
+      text: "1. สามารถแก้ไขปัญหาที่เกิดขึ้นกับเกษตรกรได้ในเฉพาะปัญหาและในระดับพื้นที่  (คะแนนเต็ม 3 คะแนน)",
+      maxScore: 3,
+      desc: ""
+    },
+    {
+      id: "b1_q2_3_2",
+      text: "2. ได้รับการจำลองรูปแบบและผลงานเพื่อนำไปใช้แก้ไขปัญหาในหลากหลายพื้นที่  (คะแนนเต็ม 3 คะแนน)",
+      maxScore: 3,
+      desc: ""
+    },
+    {
+      id: "b1_q2_3_3",
+      text: "3. สามารถพัฒนาเป็นเทคนิคที่ให้ใช้กับปัญหาและสถานการณ์ที่หลากหลายและใช้ประโยชน์ได้อย่างกว้างขวางทั้งในระดับประเทศและต่างประเทศ (คะแนนเต็ม 4 คะแนน)",
+      maxScore: 4,
+      desc: ""
+    },
+    // 2.4 สัดส่วนในการสร้างสรรค์ผลงาน (10 คะแนน)
+    {
+      id: "b1_q2_4_1",
+      text: "2.4 สัดส่วนในการสร้างสรรค์ผลงาน (คะแนนเต็ม 10 คะแนน)",
+      maxScore: 10,
+      desc: ""
+    },
+
+    // --- ส่วนที่ 3: การขยายผลงาน (30 คะแนน) ---
+    // 3.1 การถ่ายทอดผลงาน (10 คะแนน)
+    {
+      id: "b1_q3_1_1",
+      text: "1. มีตัวอย่างความสำเร็จในการ นำผลงานไปปฏิบัติเป็นแบบอย่างแก่เกษตรกร  (คะแนนเต็ม 4 คะแนน)",
+      maxScore: 4,
+      desc: ""
+    },
+    {
+      id: "b1_q3_1_2",
+      text: "2. มีกลุ่มที่รับผลงานไปถ่ายทอดแลกเปลี่ยนเรียนรู้อย่างแพร่หลาย  (คะแนนเต็ม 3 คะแนน)",
+      maxScore: 3,
+      desc: ""
+    },
+    {
+      id: "b1_q3_1_3",
+      text: "3. มีการถ่ายทอดผลงานผ่านสื่อที่หลากหลายและต่อเนื่อง (คะแนนเต็ม 3 คะแนน)",
+      maxScore: 3,
+      desc: ""
+    },
+    // 3.2 การสร้างเครือข่าย (10 คะแนน)
+    {
+      id: "b1_q3_2_1",
+      text: "1. มีทีมงานเครือข่ายในระดับชุมชนและท้องถิ่น  (คะแนนเต็ม 3 คะแนน)",
+      maxScore: 3,
+      desc: ""
+    },
+    {
+      id: "b1_q3_2_2",
+      text: "2. มีกลุ่มเครือข่ายการพัฒนาเชื่อมโยงระหว่างชุมชน ท้องถิ่น และระหว่างภูมิภาค  (คะแนนเต็ม 3 คะแนน)",
+      maxScore: 3,
+      desc: ""
+    },
+    {
+      id: "b1_q3_2_3",
+      text: "3. มีกลุ่มองค์กร และสาขาเครือข่ายการพัฒนากระจายไปอย่างกว้างขวางทั่วประเทศ (คะแนนเต็ม 4 คะแนน)",
+      maxScore: 4,
+      desc: ""
+    },
+    // 3.3 การยอมรับผลงานในระดับประเทศ และต่างประเทศ (10 คะแนน)
+    {
+      id: "b1_q3_3_1",
+      text: "1. ผลงานได้รับการยอมรับมีผู้นำไปปฏิบัติกันอย่างแพร่หลายทั่วประเทศ  (คะแนนเต็ม 3 คะแนน)",
+      maxScore: 3,
+      desc: ""
+    },
+    {
+      id: "b1_q3_3_2",
+      text: "2. ผลงานได้รับการผลักดันเป็นนโยบายหรือแนวปฏิบัติในระดับประเทศ  (คะแนนเต็ม 4 คะแนน)",
+      maxScore: 4,
+      desc: ""
+    },
+    {
+      id: "b1_q3_3_3",
+      text: "3. ผลงานได้รับการเผยแพร่จนมีการจำลองแบบไปใช้ในต่างประเทศ (คะแนนเต็ม 3 คะแนน)",
+      maxScore: 3,
+      desc: ""
+    }
+  ];
+
+  // Define general questions (Shared across all branches)
+  const generalQuestions: Question[] = [
+    {
+      id: `b${activeBranch}_q1_1_honesty_ethics`,
+      text: (activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4)
+        ? "1.1 เป็นผู้สร้างสรรค์องค์ความรู้และมีคุญูปการด้านการเกษตร"
+        : "1.1 ความซื่อสัตย์ สุจริต คุณธรรม และจริยธรรม",
+      maxScore: (activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) ? 10 : 5,
+      desc: ""
+    },
+    {
+      id: `b${activeBranch}_q1_2_sacrifice_social`,
+      text: (activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4)
+        ? "1.2 การประพฤติตนเป็นแบบอย่างที่ดี ได้ความยอมรับจากสังคม"
+        : "1.2 การอุทิศตน เสียสละ และการบำเพ็ญประโยชน์ต่อสังคม",
+      maxScore: (activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) ? 10 : 5,
+      desc: ""
+    },
+    {
+      id: `b${activeBranch}_q1_3_perseverance`,
+      text: (activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4)
+        ? "1.3 มีคุณธรรม จริยธรรม และความเสียสละ"
+        : "1.3 ความวิริยะ อุตสาหะ ในการประกอบอาชีพ",
+      maxScore: (activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) ? 10 : 5,
+      desc: ""
+    },
+    ...(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4 ? [] : [
+      {
+        id: `b${activeBranch}_q1_4_role_model`,
+        text: "1.4 การเป็นแบบอย่างที่ดีในการดำรงชีวิต",
+        maxScore: 5,
+        desc: ""
+      }
+    ])
+  ];
+
+  // Specific questions based on selected branch
+  const getSpecificQuestions = (): Question[] => {
+    switch (activeBranch) {
+      case 1: // สาขาปราชญ์เกษตรผู้ทรงภูมิปัญญาและมีคุณูปการต่อภาคการเกษตรไทย
+        return [
+          {
+            id: "b1_q2_1_initiative_tech",
+            text: "2.1  มีผลงานเป็นที่ประจักษ์ และได้รับการยอมรับ",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b1_q2_2_productivity_income",
+            text: "2.2  ประโยชน์ของผลงานที่เกี่ยวข้องกับเศรษฐกิจและสังคมภาคการเกษตร",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b1_q2_3_eco_friendly",
+            text: "2.3  การนำผลงานไปใช้ประโยชน์ในการแก้ไขปัญหา",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b1_q2_4_creativity_ratio",
+            text: "2.4  สัดส่วนในการสร้างสรรค์ผลงาน",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b1_q3_1_awards_recognition",
+            text: "3.1  การถ่ายทอดผลงาน",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b1_q3_2_speaker_trainer",
+            text: "3.2  การสร้างเครือข่าย",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b1_q3_3_learning_center",
+            text: "3.3 การยอมรับผลงานในระดับประเทศ และต่างประเทศ",
+            maxScore: 10,
+            desc: ""
+          }
+        ];
+      case 2: // สาขาปราชญ์เกษตรเศรษฐกิจพอเพียง
+        return [
+          {
+            id: "b2_q2_1_initiative_tech",
+            text: "2.1  มีผลงานเป็นที่ประจักษ์ และได้รับการยอมรับ",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b2_q2_2_productivity_income",
+            text: "2.2  ประโยชน์ของผลงานที่เกี่ยวข้องกับเศรษฐกิจและสังคมภาคการเกษตร",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b2_q2_3_eco_friendly",
+            text: "2.3  การนำผลงานไปใช้ประโยชน์ในการแก้ไขปัญหา",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b2_q2_4_creativity_ratio",
+            text: "2.4  สัดส่วนในการสร้างสรรค์ผลงาน",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b2_q3_1_awards_recognition",
+            text: "3.1  การถ่ายทอดผลงาน",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b2_q3_2_speaker_trainer",
+            text: "3.2  การสร้างเครือข่าย",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b2_q3_3_learning_center",
+            text: "3.3 การยอมรับผลงานในระดับประเทศ และต่างประเทศ",
+            maxScore: 10,
+            desc: ""
+          }
+        ];
+      case 3: // สาขาปราชญ์เกษตรดีเด่น
+        return [
+          {
+            id: "b3_q2_1_initiative_tech",
+            text: "2.1  มีผลงานเป็นที่ประจักษ์ และได้รับการยอมรับ",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b3_q2_2_productivity_income",
+            text: "2.2  ประโยชน์ของผลงานที่เกี่ยวข้องกับเศรษฐกิจและสังคมภาคการเกษตร",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b3_q2_3_eco_friendly",
+            text: "2.3  การนำผลงานไปใช้ประโยชน์ในการแก้ไขปัญหา",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b3_q2_4_creativity_ratio",
+            text: "2.4  สัดส่วนในการสร้างสรรค์ผลงาน",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b3_q3_1_awards_recognition",
+            text: "3.1  การถ่ายทอดผลงาน",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b3_q3_2_speaker_trainer",
+            text: "3.2  การสร้างเครือข่าย",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b3_q3_3_learning_center",
+            text: "3.3 การยอมรับผลงานในระดับประเทศ และต่างประเทศ",
+            maxScore: 10,
+            desc: ""
+          }
+        ];
+      case 4: // สาขาปราชญ์ผู้นำชุมชนและเครือข่าย
+        return [
+          {
+            id: "b4_q2_1_initiative_tech",
+            text: "2.1  มีผลงานเป็นที่ประจักษ์ และได้รับการยอมรับ",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b4_q2_2_productivity_income",
+            text: "2.2  ประโยชน์ของผลงานที่เกี่ยวข้องกับเศรษฐกิจและสังคมภาคการเกษตร",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b4_q2_3_eco_friendly",
+            text: "2.3  การนำผลงานไปใช้ประโยชน์ในการแก้ไขปัญหา",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b4_q2_4_creativity_ratio",
+            text: "2.4  สัดส่วนในการสร้างสรรค์ผลงาน",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b4_q3_1_awards_recognition",
+            text: "3.1  การถ่ายทอดผลงาน",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b4_q3_2_speaker_trainer",
+            text: "3.2  การสร้างเครือข่าย",
+            maxScore: 10,
+            desc: ""
+          },
+          {
+            id: "b4_q3_3_learning_center",
+            text: "3.3 การยอมรับผลงานในระดับประเทศ และต่างประเทศ",
+            maxScore: 10,
+            desc: ""
+          }
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const allQuestions = [...generalQuestions, ...getSpecificQuestions()];
+
+  // Fetch previous score if exists
+  useEffect(() => {
+    const fetchPreviousEvaluation = async () => {
+      try {
+        const res = await fetch("/api/evaluations");
+        if (res.ok) {
+          const evals: Evaluation[] = await res.json();
+          const match = evals.find(
+            e => e.candidateId === candidateId && e.committeeName === committeeName
+          );
+          if (match) {
+            setScores(match.scores);
+            setComments(match.comments);
+          } else {
+            // Initialize with zeroes
+            const init: Record<string, number> = {};
+            allQuestions.forEach(q => {
+              init[q.id] = 0;
+            });
+            setScores(init);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading previous evaluations:", err);
+      }
+    };
+    fetchPreviousEvaluation();
+  }, [candidateId, committeeName]);
+
+  const handleScoreChange = (questionId: string, value: number) => {
+    setScores(prev => ({
+      ...prev,
+      [questionId]: value
+    }));
+  };
+
+  const getRunningTotal = (): number => {
+    return Object.values(scores).reduce((sum: number, val) => sum + (val as number), 0) as number;
+  };
+
+  // Group questions by section for multi-step UI
+  const getSections = () => {
+    if (activeBranch === 1) {
+      return [
+        {
+          step: 1,
+          title: "ส่วนที่ 1: คุณลักษณะส่วนบุคคล (30 คะแนน)",
+          questions: allQuestions.filter(q => q.id.includes("_q1_"))
+        },
+        {
+          step: 2,
+          title: "ส่วนที่ 2: ผลงานที่สร้างคุณประโยชน์ (40 คะแนน)",
+          questions: allQuestions.filter(q => q.id.includes("_q2_"))
+        },
+        {
+          step: 3,
+          title: "ส่วนที่ 3: การขยายผลงาน (30 คะแนน)",
+          questions: allQuestions.filter(q => q.id.includes("_q3_"))
+        }
+      ];
+    }
+
+    const step1Title = (activeBranch === 3 || activeBranch === 2 || activeBranch === 4)
+      ? "ส่วนที่ 1: คุณลักษณะส่วนบุคคล (30 คะแนน)"
+      : "ส่วนที่ 1: คุณสมบัติส่วนบุคคล (20 คะแนน)";
+
+    return [
+      {
+        step: 1,
+        title: step1Title,
+        questions: allQuestions.filter(q => q.id.includes("_q1_"))
+      },
+      {
+        step: 2,
+        title: (activeBranch === 3 || activeBranch === 2 || activeBranch === 4)
+          ? "ส่วนที่ 2: ผลงานที่สร้างคุณประโยชน์ (40 คะแนน)"
+          : "ส่วนที่ 2: การพัฒนาภูมิปัญญา/อาชีพ (30 คะแนน)",
+        questions: allQuestions.filter(q => q.id.includes("_q2_"))
+      },
+      {
+        step: 3,
+        title: (activeBranch === 3 || activeBranch === 2 || activeBranch === 4)
+          ? "ส่วนที่ 3: การขยายผลงาน (30 คะแนน)"
+          : "ส่วนที่ 3: การยอมรับและผลงานที่เป็นคุณูปการ (30 คะแนน)",
+        questions: allQuestions.filter(q => q.id.includes("_q3_"))
+      }
+    ];
+  };
+
+  const sections = getSections();
+  const maxStep = sections.length;
+  const activeSection = sections.find(s => s.step === currentStep) || sections[0];
+
+  const validateStep = (): boolean => {
+    // Ensure all questions in the current step have a score selected
+    const stepQuestionIds = activeSection.questions.map(q => q.id);
+    const incomplete = stepQuestionIds.some(id => scores[id] === undefined);
+    if (incomplete) {
+      setError("กรุณากรอกคะแนนประเมินให้ครบถ้วนทุกข้อการประเมินในขั้นตอนนี้");
+      return false;
+    }
+    setError("");
+    return true;
+  };
+
+  const handleNext = () => {
+    if (validateStep()) {
+      setCurrentStep(prev => Math.min(prev + 1, maxStep));
+    }
+  };
+
+  const handlePrev = () => {
+    setError("");
+    setCurrentStep(prev => Math.max(prev - 1, 1));
+  };
+
+  const handleSubmit = async () => {
+    if (!validateStep()) return;
+
+    setIsSubmitting(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/evaluations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          committeeName,
+          committeeAgency,
+          branch: activeBranch,
+          candidateId,
+          scores,
+          comments
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        onSuccess();
+      } else {
+        setError(data.error || "เกิดข้อผิดพลาดในการบันทึกข้อมูลคะแนน");
+      }
+    } catch (err) {
+      setError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อส่งข้อมูลประเมินได้");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const getBranchLabel = (code: number) => {
+    switch (code) {
+      case 1: return "ผู้ทรงภูมิปัญญาและคุณูปการ";
+      case 2: return "เศรษฐกิจพอเพียง";
+      case 3: return "ปราชญ์เกษตรดีเด่น";
+      case 4: return "ผู้นำชุมชนและเครือข่าย";
+      default: return "";
+    }
+  };
+
+  if (!candidate) {
+    return (
+      <div className="p-8 text-center bg-rose-50 border border-rose-200 rounded-3xl text-rose-800 font-bold">
+        <AlertTriangle className="w-12 h-12 text-rose-600 mx-auto mb-3" />
+        <p>ไม่พบข้อมูลผู้รับการประเมินตามรหัสที่ระบุ</p>
+        <button onClick={onCancel} className="mt-4 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-4 py-2 rounded-xl text-slate-800 font-bold cursor-pointer transition-all">
+          ย้อนกลับ
+        </button>
+      </div>
+    );
+  }
+
+  const runningTotal = getRunningTotal();
+  const maxScoreTotal = allQuestions.reduce((sum, q) => sum + q.maxScore, 0);
+  const strokeDashoffset = maxScoreTotal > 0 ? 100 - (runningTotal / maxScoreTotal) * 100 : 100;
+
+  return (
+    <div className="space-y-4.5 relative text-slate-800">
+      
+      {/* Top Bar Candidate Profile Summary */}
+      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent pointer-events-none"></div>
+        <div className="flex items-center gap-3 relative">
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm shrink-0">
+            <Award className="w-5.5 h-5.5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] uppercase font-mono tracking-wider text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                สาขา {activeBranch}: {getBranchLabel(activeBranch)}
+              </span>
+            </div>
+            <h2 className="text-lg md:text-xl font-sans font-extrabold text-slate-900 mt-1 flex items-center gap-2 flex-wrap leading-tight">
+              {candidate.name}
+              <span className="text-[10px] bg-white border border-slate-200 px-2.5 py-0.5 rounded-full text-slate-600 font-bold">
+                จ.{candidate.province}
+              </span>
+            </h2>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              สังกัด: <span className="text-slate-800 font-semibold">{candidate.organization}</span> • เขตตรวจราชการ: <span className="text-slate-800 font-semibold">{candidate.district}</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Live Float Circle Scoring Meter */}
+        <div className="bg-white border border-slate-200 p-2.5 px-3.5 rounded-xl flex items-center gap-3 shrink-0 shadow-sm self-start md:self-auto">
+          <div className="relative w-11 h-11 shrink-0">
+            <svg className="w-full h-full" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="16" fill="none" stroke="#e2e8f0" strokeWidth="2.5" />
+              <circle
+                cx="18"
+                cy="18"
+                r="16"
+                fill="none"
+                stroke="#059669"
+                strokeWidth="2.5"
+                strokeDasharray="100 100"
+                strokeDashoffset={strokeDashoffset}
+                strokeLinecap="round"
+                transform="rotate(-90 18 18)"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center font-sans font-bold">
+              <span className="text-xs text-slate-900 font-black leading-none">{runningTotal}</span>
+              <span className="text-[6px] text-slate-500 uppercase font-black tracking-tight leading-none">รวม</span>
+            </div>
+          </div>
+          <div>
+            <p className="text-[9px] font-mono text-slate-400 uppercase tracking-wide">คะแนนรวมประเมิน</p>
+            <p className="text-xs font-black text-emerald-600 leading-tight">
+              {runningTotal === maxScoreTotal ? `คะแนนเต็ม ${maxScoreTotal}!` : `${runningTotal} / ${maxScoreTotal} คะแนน`}
+            </p>
+            <span className="text-[9px] text-slate-500 font-medium block mt-0.5">
+              โดย: {committeeName}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Progress Line */}
+      <div className="flex items-center justify-between px-2">
+        <div className="flex items-center gap-1 text-xs font-bold text-slate-600">
+          <span>ความคืบหน้าแบบประเมิน:</span>
+          <span className="text-emerald-700 font-mono font-black bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md">{currentStep}/{maxStep} ส่วน</span>
+        </div>
+        <button
+          onClick={() => setShowMappingHelp(!showMappingHelp)}
+          className="text-xs text-emerald-700 hover:bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl cursor-pointer font-bold transition-all"
+        >
+          {showMappingHelp ? "ซ่อนรหัสหัวตาราง Google Sheet" : "แสดงรหัสหัวตาราง Google Sheet"}
+        </button>
+      </div>
+
+      <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+        <div
+          className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full transition-all duration-300"
+          style={{ width: `${(currentStep / maxStep) * 100}%` }}
+        ></div>
+      </div>
+
+      {/* Main Questionnaire Panel - Full Width */}
+      <div className="w-full space-y-4">
+        
+        {/* Active Section Questions */}
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 md:p-6 space-y-5 relative shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="text-base md:text-lg font-sans font-extrabold text-slate-900">
+              {activeSection.title}
+            </h3>
+            <span className="text-[11px] px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-600 rounded-lg font-bold">
+              ขั้นตอน {currentStep} ใน {maxStep}
+            </span>
+          </div>
+
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3 text-rose-800 text-xs font-bold shadow-sm"
+            >
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+              <span>{error}</span>
+            </motion.div>
+          )}
+
+          {/* Section Overview Banners for Branch 1 & 3 */}
+          {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && currentStep === 1 && (
+            <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl space-y-1.5 text-xs text-emerald-950 font-medium leading-relaxed">
+              <p className="font-extrabold text-emerald-800">เกณฑ์ย่อยในขั้นตอนนี้:</p>
+              <p>• 1.1 เป็นผู้สร้างสรรค์องค์ความรู้และมีคุญูปการด้านการเกษตร (10 คะแนน)</p>
+              <p>• 1.2 การประพฤติตนเป็นแบบอย่างที่ดี ได้ความยอมรับจากสังคม (10 คะแนน)</p>
+              <p>• 1.3 มีคุณธรรม จริยธรรม และความเสียสละ (10 คะแนน)</p>
+            </div>
+          )}
+
+          {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && currentStep === 2 && (
+            <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl space-y-1.5 text-xs text-emerald-950 font-medium leading-relaxed">
+              <p className="font-extrabold text-emerald-800">เกณฑ์ย่อยในขั้นตอนนี้:</p>
+              <p>• 2.1 มีผลงานเป็นที่ประจักษ์ และได้รับการยอมรับ (10 คะแนน)</p>
+              <p>• 2.2 ประโยชน์ของผลงานที่เกี่ยวข้องกับเศรษฐกิจและสังคมภาคการเกษตร (10 คะแนน)</p>
+              <p>• 2.3 การนำผลงานไปใช้ประโยชน์ในการแก้ไขปัญหา (10 คะแนน)</p>
+              <p>• 2.4 สัดส่วนในการสร้างสรรค์ผลงาน (10 คะแนน)</p>
+            </div>
+          )}
+          {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && currentStep === 3 && (
+            <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl space-y-1.5 text-xs text-emerald-950 font-medium leading-relaxed">
+              <p className="font-extrabold text-emerald-800">เกณฑ์ย่อยในขั้นตอนนี้:</p>
+              <p>• 3.1 การถ่ายทอดผลงาน (10 คะแนน)</p>
+              <p>• 3.2 การสร้างเครือข่าย (10 คะแนน)</p>
+              <p>• 3.3 การยอมรับผลงานในระดับประเทศ และต่างประเทศ (10 คะแนน)</p>
+            </div>
+          )}
+
+          {/* Questions list */}
+          <div className="space-y-8">
+            {activeSection.questions.map((q) => {
+              const currentVal = scores[q.id] || 0;
+
+              return (
+                <div id={`question_block_${q.id}`} key={q.id} className="space-y-3 border-b border-slate-100 pb-4.5 last:border-0 last:pb-0">
+                  
+                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-1.5">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-sans font-bold text-slate-900 text-xs md:text-sm leading-snug">
+                          {q.text}
+                        </h4>
+                        {showMappingHelp && (
+                          <span className="text-[9px] font-mono bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded font-bold">
+                            Google Sheet Header: {q.id}
+                          </span>
+                        )}
+                      </div>
+                      {q.desc && (
+                        <p className="text-[11px] text-slate-500 leading-relaxed max-w-2xl">
+                          {q.desc}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Display Score details */}
+                    <div className="shrink-0 text-left md:text-right">
+                      <span className="text-[9px] text-slate-400 uppercase tracking-wider font-mono font-bold block md:inline md:mr-1">คะแนนที่เลือก:</span>
+                      <div className="text-emerald-700 font-sans font-black text-base md:text-lg inline-block">
+                        {currentVal} <span className="text-xs text-slate-400 font-normal">/ {q.maxScore}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Interactive Score Picker */}
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {Array.from({ length: q.maxScore + 1 }, (_, i) => i).map((score) => (
+                      <button
+                        id={`btn_score_${q.id}_${score}`}
+                        key={score}
+                        onClick={() => handleScoreChange(q.id, score)}
+                        className={`w-8 h-8 md:w-9 md:h-9 rounded-lg text-xs font-bold font-mono transition-all border cursor-pointer ${
+                          currentVal === score
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-md scale-105"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                        }`}
+                      >
+                        {score}
+                      </button>
+                    ))}
+                  </div>
+
+                  {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && q.id.endsWith("_honesty_ethics") && (
+                    <div className="mt-3 p-4 bg-gradient-to-br from-emerald-50/60 to-teal-50/60 border border-emerald-100/80 rounded-2xl space-y-2.5 text-xs text-slate-700 leading-relaxed shadow-sm">
+                      <p className="font-extrabold text-emerald-900 text-xs md:text-sm flex items-center gap-2">
+                        <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ตัวชี้วัด 1.1: เป็นผู้สร้างสรรค์องค์ความรู้และมีคุณูปการด้านการเกษตร (10 คะแนน)
+                      </p>
+                      <div className="border-t border-emerald-100/50 my-1.5"></div>
+                      <div className="space-y-1.5 pl-3 border-l border-emerald-200">
+                        <p>1. เป็นบุคคลที่มีคุณูปการต่อภาคเกษตร มีชื่อเสียงได้รับการยอมรับในระดับพื้นที่หรือกลุ่มอาชีพ ไม่น้อยกว่า 20 ปี <span className="font-semibold text-emerald-700 font-mono">(4 คะแนน)</span></p>
+                        <p>2. เป็นบุคคลที่มีคุณูปการต่อภาคเกษตร มีชื่อเสียงได้รับการยอมรับในระดับประเทศ ไม่น้อยกว่า 20 ปี <span className="font-semibold text-emerald-700 font-mono">(4 คะแนน)</span></p>
+                        <p>3. เป็นบุคคลที่มีคุณูปการต่อภาคเกษตร มีชื่อเสียงได้รับการยอมรับในระดับต่างประเทศ ไม่น้อยกว่า 10 ปี <span className="font-semibold text-emerald-700 font-mono">(2 คะแนน)</span></p>
+                      </div>
+                    </div>
+                  )}
+
+                  {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && q.id.endsWith("_sacrifice_social") && (
+                    <div className="mt-3 p-4 bg-gradient-to-br from-emerald-50/60 to-teal-50/60 border border-emerald-100/80 rounded-2xl space-y-2.5 text-xs text-slate-700 leading-relaxed shadow-sm">
+                      <p className="font-extrabold text-emerald-900 text-xs md:text-sm flex items-center gap-2">
+                        <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ตัวชี้วัด 1.2: การประพฤติตนเป็นแบบอย่างที่ดี ได้ความยอมรับจากสังคม (10 คะแนน)
+                      </p>
+                      <div className="border-t border-emerald-100/50 my-1.5"></div>
+                      <div className="space-y-1.5 pl-3 border-l border-emerald-200">
+                        <p>1. ขยันหมั่นเพียร ใช้เวลาว่างให้เกิดประโยชน์ เป็นตัวอย่างของการพึ่งพาตนเอง <span className="font-semibold text-emerald-700 font-mono">(2 คะแนน)</span></p>
+                        <p>2. เป็นแบบอย่างที่ดีของสมาชิกในครอบครัว ผู้คนในระดับชุมชนและประเทศ <span className="font-semibold text-emerald-700 font-mono">(2 คะแนน)</span></p>
+                        <p>3. มีระเบียบวินัย เคารพกฎหมาย มีมารยาทและรับผิดชอบต่อส่วนรวม <span className="font-semibold text-emerald-700 font-mono">(2 คะแนน)</span></p>
+                        <p>4. ปฏิบัติตนตามครรลองของระบอบประชาธิปไตย <span className="font-semibold text-emerald-700 font-mono">(2 คะแนน)</span></p>
+                        <p>5. เป็นผู้ใฝ่รู้และนำความรู้มาปฏิบัติงานจนเกิดประโยชน์ <span className="font-semibold text-emerald-700 font-mono">(2 คะแนน)</span></p>
+                      </div>
+                    </div>
+                  )}
+
+                  {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && q.id.endsWith("_perseverance") && (
+                    <div className="mt-3 p-4 bg-gradient-to-br from-emerald-50/60 to-teal-50/60 border border-emerald-100/80 rounded-2xl space-y-2.5 text-xs text-slate-700 leading-relaxed shadow-sm">
+                      <p className="font-extrabold text-emerald-900 text-xs md:text-sm flex items-center gap-2">
+                        <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ตัวชี้วัด 1.3: มีคุณธรรม จริยธรรม และความเสียสละ (10 คะแนน)
+                      </p>
+                      <div className="border-t border-emerald-100/50 my-1.5"></div>
+                      <div className="space-y-1.5 pl-3 border-l border-emerald-200">
+                        <p>1. มีนิสัยเอื้อเฟื้อเผื่อแผ่ ช่วยเหลือผู้อื่นโดยไม่หวังสิ่งตอบแทน <span className="font-semibold text-emerald-700 font-mono">(5 คะแนน)</span></p>
+                        <p>2. ยึดถือและปฏิบัติตามหลักคุณธรรมทางศาสนา <span className="font-semibold text-emerald-700 font-mono">(5 คะแนน)</span></p>
+                      </div>
+                    </div>
+                  )}
+
+                  {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && q.id.endsWith("_initiative_tech") && (
+                    <div className="mt-3 p-4 bg-gradient-to-br from-emerald-50/60 to-teal-50/60 border border-emerald-100/80 rounded-2xl space-y-2.5 text-xs text-slate-700 leading-relaxed shadow-sm">
+                      <p className="font-extrabold text-emerald-900 text-xs md:text-sm flex items-center gap-2">
+                        <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ตัวชี้วัด 2.1: มีผลงานเป็นที่ประจักษ์ และได้รับการยอมรับ (10 คะแนน)
+                      </p>
+                      <div className="border-t border-emerald-100/50 my-1.5"></div>
+                      <div className="space-y-1.5 pl-3 border-l border-emerald-200">
+                        <p>1. ได้รับรางวัลและประกาศเกียรติคุณในระดับประเทศและหรือในระดับนานาชาติ <span className="font-semibold text-emerald-700 font-mono">(3 คะแนน)</span></p>
+                        <p>2. ผลงานได้รับการตีพิมพ์และเผยแพร่ผ่านสื่อต่างๆ อย่างกว้างขวางในระดับประเทศ และหรือได้รับเชิญเป็นวิทยากรเพื่อบรรยายและนำเสนอผลงานในระดับประเทศ <span className="font-semibold text-emerald-700 font-mono">(3 คะแนน)</span></p>
+                        <p>3. ร่วมเป็นคณะกรรมการหรือแกนนำองค์กรที่มีบทบาทในการกำหนดนโยบายและผลักดันขับเคลื่อนการพัฒนาภาคการเกษตร <span className="font-semibold text-emerald-700 font-mono">(4 คะแนน)</span></p>
+                      </div>
+                    </div>
+                  )}
+
+                  {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && q.id.endsWith("_productivity_income") && (
+                    <div className="mt-3 p-4 bg-gradient-to-br from-emerald-50/60 to-teal-50/60 border border-emerald-100/80 rounded-2xl space-y-2.5 text-xs text-slate-700 leading-relaxed shadow-sm">
+                      <p className="font-extrabold text-emerald-900 text-xs md:text-sm flex items-center gap-2">
+                        <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ตัวชี้วัด 2.2: ประโยชน์ของผลงานที่เกี่ยวข้องกับเศรษฐกิจและสังคมภาคการเกษตร (10 คะแนน)
+                      </p>
+                      <div className="border-t border-emerald-100/50 my-1.5"></div>
+                      <div className="space-y-1.5 pl-3 border-l border-emerald-200">
+                        <p>1. ผลงานก่อให้เกิดการเปลี่ยนแปลงรูปแบบการผลิตภาคการเกษตรในระดับชุมชนท้องถิ่น นำสู่การพัฒนาคุณภาพชีวิตและความเป็นอยู่ที่ดีขึ้น <span className="font-semibold text-emerald-700 font-mono">(3 คะแนน)</span></p>
+                        <p>2. ผลงานก่อให้เกิดการเปลี่ยนแปลงโครงสร้าง การผลิตด้านการเกษตรที่มีผลต่อการกระจายรายได้ที่เป็นธรรมและทั่วถึง <span className="font-semibold text-emerald-700 font-mono">(3 คะแนน)</span></p>
+                        <p>3. ผลงานก่อให้เกิดการขยายตัวของการผลิตทางการเกษตรส่งผลต่อการสร้างรายได้และการเจริญเติบโตทางเศรษฐกิจ <span className="font-semibold text-emerald-700 font-mono">(4 คะแนน)</span></p>
+                      </div>
+                    </div>
+                  )}
+
+                  {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && q.id.endsWith("_eco_friendly") && (
+                    <div className="mt-3 p-4 bg-gradient-to-br from-emerald-50/60 to-teal-50/60 border border-emerald-100/80 rounded-2xl space-y-2.5 text-xs text-slate-700 leading-relaxed shadow-sm">
+                      <p className="font-extrabold text-emerald-900 text-xs md:text-sm flex items-center gap-2">
+                        <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ตัวชี้วัด 2.3: การนำผลงานไปใช้ประโยชน์ในการแก้ไขปัญหา (10 คะแนน)
+                      </p>
+                      <div className="border-t border-emerald-100/50 my-1.5"></div>
+                      <div className="space-y-1.5 pl-3 border-l border-emerald-200">
+                        <p>1. สามารถแก้ไขปัญหาที่เกิดขึ้นกับเกษตรกรได้ในเฉพาะปัญหาและในระดับพื้นที่ <span className="font-semibold text-emerald-700 font-mono">(3 คะแนน)</span></p>
+                        <p>2. ได้รับการจำลองรูปแบบและผลงานเพื่อนำไปใช้แก้ไขปัญหาในหลากหลายพื้นที่ <span className="font-semibold text-emerald-700 font-mono">(3 คะแนน)</span></p>
+                        <p>3. สามารถพัฒนาเป็นเทคนิคที่ให้ใช้กับปัญหาและสถานการณ์ที่หลากหลายและใช้ประโยชน์ได้อย่างกว้างขวางทั้งในระดับประเทศและต่างประเทศ <span className="font-semibold text-emerald-700 font-mono">(4 คะแนน)</span></p>
+                      </div>
+                    </div>
+                  )}
+
+                  {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && q.id.endsWith("_creativity_ratio") && (
+                    <div className="mt-3 p-4 bg-gradient-to-br from-emerald-50/60 to-teal-50/60 border border-emerald-100/80 rounded-2xl space-y-2.5 text-xs text-slate-700 leading-relaxed shadow-sm">
+                      <p className="font-extrabold text-emerald-900 text-xs md:text-sm flex items-center gap-2">
+                        <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ตัวชี้วัด 2.4: สัดส่วนในการสร้างสรรค์ผลงาน (10 คะแนน)
+                      </p>
+                      <div className="border-t border-emerald-100/50 my-1.5"></div>
+                      <div className="space-y-2 pl-3 border-l border-emerald-200">
+                        <p className="font-semibold text-slate-800">1. เป็นผลงานที่เกิดจากความคิดริเริ่มสร้างสรรค์ของตนเอง <span className="font-semibold text-emerald-700 font-mono">(10 คะแนน)</span></p>
+                        <div className="border-t border-emerald-100/30 my-1"></div>
+                        <p className="font-semibold text-slate-800">2. เป็นผลงานที่เกิดจากความคิดสร้างสรรค์ของกลุ่ม:</p>
+                        <ul className="list-disc pl-4.5 space-y-1 text-[11px] text-slate-600 font-medium">
+                          <li>มีส่วนร่วมในการสร้างสรรค์ผลงานของกลุ่มน้อยกว่าร้อยละ 50 <span className="font-semibold text-slate-800 font-mono">(0 – 4 คะแนน)</span></li>
+                          <li>มีส่วนร่วมในการสร้างสรรค์ผลงานของกลุ่มไม่น้อยกว่าร้อยละ 50 แต่ไม่เกินร้อยละ 70 <span className="font-semibold text-slate-800 font-mono">(5 – 6 คะแนน)</span></li>
+                          <li>มีส่วนร่วมในการสร้างสรรค์ผลงานของกลุ่มไม่น้อยกว่าร้อยละ 70 <span className="font-semibold text-slate-800 font-mono">(7 – 9 คะแนน)</span></li>
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && q.id.endsWith("_awards_recognition") && (
+                    <div className="mt-3 p-4 bg-gradient-to-br from-emerald-50/60 to-teal-50/60 border border-emerald-100/80 rounded-2xl space-y-2.5 text-xs text-slate-700 leading-relaxed shadow-sm">
+                      <p className="font-extrabold text-emerald-900 text-xs md:text-sm flex items-center gap-2">
+                        <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ตัวชี้วัด 3.1: การถ่ายทอดผลงาน (10 คะแนน)
+                      </p>
+                      <div className="border-t border-emerald-100/50 my-1.5"></div>
+                      <div className="space-y-1.5 pl-3 border-l border-emerald-200">
+                        <p>1. มีตัวอย่างความสำเร็จในการ นำผลงานไปปฏิบัติเป็นแบบอย่างแก่เกษตรกร <span className="font-semibold text-emerald-700 font-mono">(4 คะแนน)</span></p>
+                        <p>2. มีกลุ่มที่รับผลงานไปถ่ายทอดแลกเปลี่ยนเรียนรู้อย่างแพร่หลาย <span className="font-semibold text-emerald-700 font-mono">(3 คะแนน)</span></p>
+                        <p>3. มีการถ่ายทอดผลงานผ่านสื่อที่หลากหลายและต่อเนื่อง <span className="font-semibold text-emerald-700 font-mono">(3 คะแนน)</span></p>
+                      </div>
+                    </div>
+                  )}
+
+                  {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && q.id.endsWith("_speaker_trainer") && (
+                    <div className="mt-3 p-4 bg-gradient-to-br from-emerald-50/60 to-teal-50/60 border border-emerald-100/80 rounded-2xl space-y-2.5 text-xs text-slate-700 leading-relaxed shadow-sm">
+                      <p className="font-extrabold text-emerald-900 text-xs md:text-sm flex items-center gap-2">
+                        <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ตัวชี้วัด 3.2: การสร้างเครือข่าย (10 คะแนน)
+                      </p>
+                      <div className="border-t border-emerald-100/50 my-1.5"></div>
+                      <div className="space-y-1.5 pl-3 border-l border-emerald-200">
+                        <p>1. มีทีมงานเครือข่ายในระดับชุมชนและท้องถิ่น <span className="font-semibold text-emerald-700 font-mono">(3 คะแนน)</span></p>
+                        <p>2. มีกลุ่มเครือข่ายการพัฒนาเชื่อมโยงระหว่างชุมชน ท้องถิ่น และระหว่างภูมิภาค <span className="font-semibold text-emerald-700 font-mono">(3 คะแนน)</span></p>
+                        <p>3. มีกลุ่มองค์กร และสาขาเครือข่ายการพัฒนากระจายไปอย่างกว้างขวางทั่วประเทศ <span className="font-semibold text-emerald-700 font-mono">(4 คะแนน)</span></p>
+                      </div>
+                    </div>
+                  )}
+
+                  {(activeBranch === 1 || activeBranch === 3 || activeBranch === 2 || activeBranch === 4) && q.id.endsWith("_learning_center") && (
+                    <div className="mt-3 p-4 bg-gradient-to-br from-emerald-50/60 to-teal-50/60 border border-emerald-100/80 rounded-2xl space-y-2.5 text-xs text-slate-700 leading-relaxed shadow-sm">
+                      <p className="font-extrabold text-emerald-900 text-xs md:text-sm flex items-center gap-2">
+                        <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ตัวชี้วัด 3.3: การยอมรับผลงานในระดับประเทศ และต่างประเทศ (10 คะแนน)
+                      </p>
+                      <div className="border-t border-emerald-100/50 my-1.5"></div>
+                      <div className="space-y-1.5 pl-3 border-l border-emerald-200">
+                        <p>1. ผลงานได้รับการยอมรับมีผู้นำไปปฏิบัติกันอย่างแพร่หลายทั่วประเทศ <span className="font-semibold text-emerald-700 font-mono">(3 คะแนน)</span></p>
+                        <p>2. ผลงานได้รับการผลักดันเป็นนโยบายหรือแนวปฏิบัติในระดับประเทศ <span className="font-semibold text-emerald-700 font-mono">(4 คะแนน)</span></p>
+                        <p>3. ผลงานได้รับการเผยแพร่จนมีการจำลองแบบไปใช้ในต่างประเทศ <span className="font-semibold text-emerald-700 font-mono">(3 คะแนน)</span></p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Form Actions Footer */}
+          <div className="flex items-center justify-between pt-6 border-t border-slate-100 mt-8">
+            <button
+              id="btn_prev_step"
+              onClick={currentStep === 1 ? onCancel : handlePrev}
+              className="px-5 py-2.5 rounded-xl text-xs md:text-sm font-bold text-slate-600 hover:text-slate-900 bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              {currentStep === 1 ? "ยกเลิก" : "ย้อนกลับ"}
+            </button>
+
+            {currentStep < maxStep ? (
+              <button
+                id="btn_next_step"
+                onClick={handleNext}
+                className="px-5 py-2.5 rounded-xl text-xs md:text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+              >
+                ถัดไป
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                id="btn_submit_evaluation"
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+                className="px-6 py-3 rounded-xl text-xs md:text-sm bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold transition-all shadow-lg cursor-pointer flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>บันทึกส่งคะแนนระบบ</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}

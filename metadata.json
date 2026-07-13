@@ -1,0 +1,6 @@
+{
+  "name": "แบบลงคะแนนสรรหาปราชญ์เกษตรของแผ่นดิน ปี 2570",
+  "description": "ระบบลงคะแนนออนไลน์สำหรับคณะกรรมการสรรหาปราชญ์เกษตรของแผ่นดิน ปี 2570 ทั้ง 4 สาขา แสดงผลคะแนนเรียลไทม์ สรุปรายงานอัตโนมัติ และสอดคล้องกับโครงสร้าง Google Sheets",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
